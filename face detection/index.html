@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Emotion Scanner — On‑Device, One Page</title>
+  <style>
+    :root{
+      --bg:#0b0f1a; --card:#111827; --muted:#93a3b8; --accent:#3b82f6; --ok:#10b981; --warn:#f59e0b; --err:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1f2937 0%,#0b0f1a 45%,#0b0f1a 100%);color:#e5e7eb;min-height:100vh;display:flex;flex-direction:column}
+    .wrap{flex:1;max-width:1080px;margin:0 auto;padding:24px;display:flex;flex-direction:column}
+    header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .title{display:flex;align-items:center;gap:12px}
+    h1{font-size:clamp(20px,2.8vw,28px);margin:0}
+    p.subtitle{margin:0;color:var(--muted)}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.06);box-shadow:0 10px 30px rgba(0,0,0,.35);border-radius:20px}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px}
+    button,select{appearance:none;border:1px solid rgba(255,255,255,.12);background:#0f172a;color:#e5e7eb;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;transition:background .2s ease}
+    button.primary{background:var(--accent);border-color:transparent;color:white}
+    button:hover:not(:disabled){background:#2563eb}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px;flex:1}
+    @media (min-width: 860px){.grid{grid-template-columns: 2fr 1fr}}
+    .stage{position:relative;overflow:hidden;border-radius:18px;min-height:300px}
+    video,canvas{width:100%;height:auto;display:block}
+    video{background:#000;border-bottom:1px solid rgba(255,255,255,.06);transform:scaleX(-1)}
+    .badge{position:absolute;left:14px;bottom:14px;background:rgba(17,24,39,.72);backdrop-filter:blur(6px);padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);font-weight:700;transition:opacity .3s ease}
+    .panel{padding:16px;overflow-y:auto;max-height:calc(100vh - 200px)}
+    .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .meter{height:10px;background:#0f172a;border:1px solid rgba(255,255,255,.08);border-radius:999px;overflow:hidden;flex:1;margin-left:8px}
+    .meter > span{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#22c55e);transition:width .3s ease}
+    .muted{color:var(--muted)}
+    .log{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-size:12px;line-height:1.4;max-height:180px;overflow:auto;background:#0a1020;border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.07)}
+    footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
+    .status{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12)}
+    .status .dot{width:8px;height:8px;border-radius:999px;background:#64748b}
+    .status.ok .dot{background:var(--ok)}
+    .status.warn .dot{background:var(--warn)}
+    .status.err .dot{background:var(--err)}
+    .right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    label.toggle{display:flex;align-items:center;gap:8px;user-select:none}
+    input[type="checkbox"]{width:36px;height:20px;appearance:none;background:#0f172a;border-radius:999px;position:relative;border:1px solid rgba(255,255,255,.15);outline:none;cursor:pointer}
+    input[type="checkbox"]:after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:999px;background:#e5e7eb;transition:transform .15s ease}
+    input[type="checkbox"]:checked:after{transform:translateX(16px)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <h1>Emotion Scanner</h1>
+        <p class="subtitle">On‑device • One page • Secure</p>
+      </div>
+      <div class="right">
+        <span id="status" class="status"><span class="dot"></span><span class="label">Idle</span></span>
+        <button id="btnStart" class="primary">Start camera</button>
+        <button id="btnStop" disabled>Stop</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card stage">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="badge" id="badge">No face</div>
+      </section>
+
+      <aside class="card panel">
+        <div class="row">
+          <div class="muted">Top emotion</div>
+          <div id="topEmotion">—</div>
+        </div>
+        <div class="row">
+          <div class="muted">Confidence</div>
+          <div id="conf">—</div>
+        </div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:10px">
+          <label class="toggle"><input type="checkbox" id="mirror" checked /> Mirror preview</label>
+          <select id="size">
+            <option value="224">Speed (224px)</option>
+            <option value="320">Balanced (320px)</option>
+            <option value="416" selected>Quality (416px)</option>
+          </select>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted" style="margin-bottom:6px">Emotion meters</div>
+          <div id="meters"></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="muted" style="margin-bottom:6px">Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <p>Privacy: Video stays on your device. Nothing is uploaded. Use good lighting for best results.</p>
+    </footer>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+
+  <script>
+    const els = {
+      video: document.getElementById('video'),
+      canvas: document.getElementById('overlay'),
+      badge: document.getElementById('badge'),
+      top: document.getElementById('topEmotion'),
+      conf: document.getElementById('conf'),
+      meters: document.getElementById('meters'),
+      log: document.getElementById('log'),
+      btnStart: document.getElementById('btnStart'),
+      btnStop: document.getElementById('btnStop'),
+      status: document.getElementById('status'),
+      mirror: document.getElementById('mirror'),
+      size: document.getElementById('size'),
+    };
+
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/vladmandic/face-api@1.4.1/model/';
+    let stream = null, running = false, rafId = null;
+
+    const EMOJI = { neutral:'😐', happy:'😊', sad:'😢', angry:'😠', fearful:'😨', disgusted:'🤢', surprised:'😮' };
+
+    function setStatus(kind, text){
+      const c = els.status; c.className = `status ${kind||''}`; c.querySelector('.label').textContent = text;
+    }
+
+    async function loadModels(){
+      setStatus('warn','Loading models…');
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL).catch(()=>{})
+      ]);
+      setStatus('ok','Models ready');
+      log('Models loaded');
+    }
+
+    function buildMeters(){
+      els.meters.innerHTML = '';
+      for(const key of Object.keys(EMOJI)){
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `<span>${EMOJI[key]} ${key}</span><div class="meter" data-key="${key}"><span></span></div>`;
+        els.meters.appendChild(row);
+      }
+    }
+
+    async function startCamera(){
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio:false });
+        els.video.srcObject = stream;
+        await els.video.play();
+        resizeCanvas();
+        setStatus('ok','Camera on');
+        log('Camera started');
+      }catch(err){
+        setStatus('err','Camera blocked');
+        log(`Camera error: ${err.message}`);
+      }
+    }
+
+    function stopCamera(){
+      if(stream){ for(const t of stream.getTracks()) t.stop(); stream = null; }
+      cancelAnimationFrame(rafId); rafId = null; running=false;
+      setStatus('', 'Idle');
+      log('Camera stopped');
+    }
+
+    function resizeCanvas(){
+      els.canvas.width = els.video.videoWidth || 640;
+      els.canvas.height = els.video.videoHeight || 480;
+    }
+
+    function mirrorVideo(){
+      els.video.style.transform = els.mirror.checked ? 'scaleX(-1)' : 'none';
+    }
+
+    function log(msg){
+      const time = new Date().toLocaleTimeString();
+      els.log.textContent = `[${time}] ${msg}\n` + els.log.textContent;
+    }
+
+    async function loop(){
+      if(!running) return;
+      const inputSize = parseInt(els.size.value, 10);
+      const opts = new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.5 });
+
+      const result = await faceapi.detectSingleFace(els.video, opts).withFaceLandmarks().withFaceExpressions();
+      const ctx = els.canvas.getContext('2d');
+      ctx.clearRect(0,0,els.canvas.width,els.canvas.height);
+
+      if(result){
+        const dims = faceapi.matchDimensions(els.canvas, { width: els.video.videoWidth, height: els.video.videoHeight });
+        const resized = faceapi.resizeResults(result, dims);
+        faceapi.draw.drawDetections(els.canvas, resized);
+        if(resized.landmarks) faceapi.draw.drawFaceLandmarks(els.canvas, resized);
+
+        const expr = resized.expressions;
+        let top = 'neutral', val = 0;
+        for(const [k,v] of Object.entries(expr)) if(v > val){ top=k; val=v; }
+
+        els.badge.textContent = `${EMOJI[top]} ${top} ${(val*100).toFixed(0)}%`;
+        els.top.textContent = `${EMOJI[top]} ${top}`;
+        els.conf.textContent = `${(val*100).toFixed(1)}%`;
+
+        document.querySelectorAll('.meter').forEach(m => {
+          const k = m.dataset.key; m.firstElementChild.style.width = `${((expr[k]||0)*100).toFixed(0)}%`;
+        });
+      } else {
+        els.badge.textContent = 'No face';
+        els.top.textContent = '—';
+        els.conf.textContent = '—';
+        document.querySelectorAll('.meter > span').forEach(s => s.style.width = '0%');
+      }
+      rafId = requestAnimationFrame(loop);
+    }
+
+    async function init(){
+      buildMeters();
+      mirrorVideo();
+      await loadModels();
+      els.btnStart.disabled = false;
+    }
+
+    els.btnStart.addEventListener('click', async () => {
+      els.btnStart.disabled = true; els.btnStop.disabled = false;
+      await startCamera(); running = true; loop();
+    });
+
+    els.btnStop.addEventListener('click', () => { els.btnStop.disabled = true; els.btnStart.disabled = false; stopCamera(); });
+    els.mirror.addEventListener('change', mirrorVideo);
+    els.size.addEventListener('change', () => log(`Detector input size set to ${els.size.value}px`));
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>
